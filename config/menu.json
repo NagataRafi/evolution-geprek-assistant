@@ -1,0 +1,66 @@
+{
+  "currency": "IDR",
+  "spiceLevels": [
+    { "level": 0, "name": "Tidak pedas" },
+    { "level": 1, "name": "Pedas" },
+    { "level": 2, "name": "Sedang" },
+    { "level": 3, "name": "Pedas banget" },
+    { "level": 4, "name": "Level dewa" },
+    { "level": 5, "name": "Level neraka" }
+  ],
+  "items": [
+    {
+      "id": "geprek-original",
+      "name": "Ayam Geprek Original",
+      "price": 15000,
+      "available": true,
+      "requiresSpiceLevel": true,
+      "description": "Ayam crispy digeprek dengan sambal bawang."
+    },
+    {
+      "id": "geprek-keju",
+      "name": "Ayam Geprek Keju",
+      "price": 20000,
+      "available": true,
+      "requiresSpiceLevel": true,
+      "description": "Ayam geprek dengan topping keju parut."
+    },
+    {
+      "id": "geprek-mozzarella",
+      "name": "Ayam Geprek Mozzarella",
+      "price": 25000,
+      "available": true,
+      "requiresSpiceLevel": true,
+      "description": "Ayam geprek dengan mozzarella leleh."
+    },
+    {
+      "id": "nasi-putih",
+      "name": "Nasi Putih",
+      "price": 4000,
+      "available": true,
+      "requiresSpiceLevel": false,
+      "description": "Nasi putih hangat."
+    },
+    {
+      "id": "es-teh",
+      "name": "Es Teh Manis",
+      "price": 5000,
+      "available": true,
+      "requiresSpiceLevel": false,
+      "description": "Es teh manis segar."
+    },
+    {
+      "id": "es-jeruk",
+      "name": "Es Jeruk",
+      "price": 7000,
+      "available": true,
+      "requiresSpiceLevel": false,
+      "description": "Es jeruk peras."
+    }
+  ],
+  "addOns": [
+    { "id": "extra-telur", "name": "Extra Telur", "price": 5000, "available": true },
+    { "id": "extra-keju", "name": "Extra Keju", "price": 5000, "available": true },
+    { "id": "extra-nasi", "name": "Extra Nasi", "price": 4000, "available": true }
+  ]
+}
