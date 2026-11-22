@@ -59,8 +59,23 @@
     }
   ],
   "addOns": [
-    { "id": "extra-telur", "name": "Extra Telur", "price": 5000, "available": true },
-    { "id": "extra-keju", "name": "Extra Keju", "price": 5000, "available": true },
-    { "id": "extra-nasi", "name": "Extra Nasi", "price": 4000, "available": true }
+    {
+      "id": "extra-telur",
+      "name": "Extra Telur",
+      "price": 5000,
+      "available": true
+    },
+    {
+      "id": "extra-keju",
+      "name": "Extra Keju",
+      "price": 5000,
+      "available": true
+    },
+    {
+      "id": "extra-nasi",
+      "name": "Extra Nasi",
+      "price": 4000,
+      "available": true
+    }
   ]
 }

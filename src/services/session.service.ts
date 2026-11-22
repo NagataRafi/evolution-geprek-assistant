@@ -1,11 +1,39 @@
+import Redis from "ioredis";
+
+import { env } from "../config";
 import type { ChatMessage, CustomerSession } from "../types/session";
 
-const SESSION_TTL_MS = 30 * 60 * 1000;
 const MAX_HISTORY = 20;
-const MAX_PROCESSED_IDS = 50;
-const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
+const KEY_PREFIX = "geprek";
+const HANDOVER_KEY = `${KEY_PREFIX}:handover`;
 
-const sessions = new Map<string, CustomerSession>();
+let client: Redis | null = null;
+
+function sessionKey(remoteJid: string): string {
+  return `${KEY_PREFIX}:session:${remoteJid}`;
+}
+
+function dedupeKey(remoteJid: string, messageId: string): string {
+  return `${KEY_PREFIX}:seen:${remoteJid}:${messageId}`;
+}
+
+function getRedis(): Redis {
+  if (!client) {
+    client = new Redis(env.redisUrl, {
+      connectTimeout: 5_000,
+      // Tunggu koneksi awal sebentar, tapi jangan menggantung saat Redis mati.
+      enableOfflineQueue: true,
+      maxRetriesPerRequest: 2,
+      retryStrategy: (attempt) => (attempt > 5 ? null : Math.min(attempt * 200, 1_000)),
+    });
+
+    client.on("error", (error: Error) => {
+      console.error("[redis] Koneksi bermasalah:", error.message);
+    });
+  }
+
+  return client;
+}
 
 function createSession(remoteJid: string, pushName?: string): CustomerSession {
   const now = Date.now();
@@ -15,93 +43,157 @@ function createSession(remoteJid: string, pushName?: string): CustomerSession {
     state: "IDLE",
     cart: [],
     history: [],
-    processedMessageIds: [],
     isHumanHandover: false,
     createdAt: now,
     updatedAt: now,
   };
 }
 
-function isExpired(session: CustomerSession): boolean {
-  return Date.now() - session.updatedAt > SESSION_TTL_MS;
+function parseSession(raw: string): CustomerSession {
+  try {
+    return JSON.parse(raw) as CustomerSession;
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`Data sesi di Redis rusak: ${reason}`);
+  }
 }
 
-function getSession(remoteJid: string, pushName?: string): CustomerSession {
-  const existing = sessions.get(remoteJid);
+async function saveSession(session: CustomerSession): Promise<void> {
+  session.updatedAt = Date.now();
+  await getRedis().set(
+    sessionKey(session.remoteJid),
+    JSON.stringify(session),
+    "EX",
+    env.sessionTtlSeconds,
+  );
+}
 
-  if (existing && !isExpired(existing)) {
-    if (pushName) existing.pushName = pushName;
-    existing.updatedAt = Date.now();
-    return existing;
-  }
+async function getSession(
+  remoteJid: string,
+  pushName?: string,
+): Promise<CustomerSession> {
+  const raw = await getRedis().get(sessionKey(remoteJid));
+  const session = raw ? parseSession(raw) : createSession(remoteJid, pushName);
 
-  const session = createSession(remoteJid, pushName);
-  sessions.set(remoteJid, session);
+  if (pushName) session.pushName = pushName;
+  await saveSession(session);
   return session;
 }
 
-function addMessage(remoteJid: string, role: ChatMessage["role"], content: string): void {
-  const session = getSession(remoteJid);
+async function addMessage(
+  remoteJid: string,
+  role: ChatMessage["role"],
+  content: string,
+): Promise<CustomerSession> {
+  const session = await getSession(remoteJid);
 
   session.history.push({ role, content, timestamp: Date.now() });
   if (session.history.length > MAX_HISTORY) {
     session.history = session.history.slice(-MAX_HISTORY);
   }
-  session.updatedAt = Date.now();
-}
 
-function isDuplicate(remoteJid: string, messageId: string): boolean {
-  if (!messageId) return false;
-  return getSession(remoteJid).processedMessageIds.includes(messageId);
-}
-
-function markProcessed(remoteJid: string, messageId: string): void {
-  if (!messageId) return;
-
-  const session = getSession(remoteJid);
-  session.processedMessageIds.push(messageId);
-  if (session.processedMessageIds.length > MAX_PROCESSED_IDS) {
-    session.processedMessageIds = session.processedMessageIds.slice(-MAX_PROCESSED_IDS);
-  }
-  session.updatedAt = Date.now();
-}
-
-function setHumanHandover(remoteJid: string, reason: string): CustomerSession {
-  const session = getSession(remoteJid);
-  session.isHumanHandover = true;
-  session.state = "HANDOVER";
-  session.handoverReason = reason;
-  session.updatedAt = Date.now();
+  await saveSession(session);
   return session;
 }
 
-function resumeBot(remoteJid: string): boolean {
-  const session = sessions.get(remoteJid);
-  if (!session) return false;
+/**
+ * Atomik: hanya pemanggil pertama untuk messageId yang sama yang mendapat `true`.
+ * Mencegah balasan ganda saat Evolution mengirim ulang webhook.
+ */
+async function claimMessage(remoteJid: string, messageId: string): Promise<boolean> {
+  if (!messageId) return true;
 
+  const result = await getRedis().set(
+    dedupeKey(remoteJid, messageId),
+    "1",
+    "EX",
+    env.sessionTtlSeconds,
+    "NX",
+  );
+
+  return result === "OK";
+}
+
+async function setHumanHandover(
+  remoteJid: string,
+  reason: string,
+): Promise<CustomerSession> {
+  const session = await getSession(remoteJid);
+  session.isHumanHandover = true;
+  session.state = "HANDOVER";
+  session.handoverReason = reason;
+
+  await saveSession(session);
+  await getRedis().zadd(
+    HANDOVER_KEY,
+    Date.now() + env.sessionTtlSeconds * 1000,
+    remoteJid,
+  );
+  return session;
+}
+
+async function resumeBot(remoteJid: string): Promise<boolean> {
+  const raw = await getRedis().get(sessionKey(remoteJid));
+  if (!raw) return false;
+
+  const session = parseSession(raw);
   session.isHumanHandover = false;
   session.handoverReason = undefined;
   session.state = "IDLE";
-  session.updatedAt = Date.now();
+
+  await saveSession(session);
+  await getRedis().zrem(HANDOVER_KEY, remoteJid);
   return true;
 }
 
-function resetSession(remoteJid: string): void {
-  sessions.delete(remoteJid);
+async function completeOrder(remoteJid: string): Promise<CustomerSession | null> {
+  const raw = await getRedis().get(sessionKey(remoteJid));
+  if (!raw) return null;
+
+  const session = parseSession(raw);
+  session.cart = [];
+  session.state = "DONE";
+
+  await saveSession(session);
+  return session;
 }
 
-setInterval(() => {
-  for (const [remoteJid, session] of sessions) {
-    if (isExpired(session)) sessions.delete(remoteJid);
+async function listHandoverSessions(): Promise<CustomerSession[]> {
+  const redis = getRedis();
+  await redis.zremrangebyscore(HANDOVER_KEY, "-inf", String(Date.now()));
+
+  const jids = await redis.zrange(HANDOVER_KEY, "0", "-1");
+  if (jids.length === 0) return [];
+
+  const rawSessions = await redis.mget(jids.map((jid) => sessionKey(jid)));
+  const sessions: CustomerSession[] = [];
+
+  for (let index = 0; index < jids.length; index += 1) {
+    const raw = rawSessions[index];
+    if (!raw) {
+      await redis.zrem(HANDOVER_KEY, jids[index]);
+      continue;
+    }
+
+    const session = parseSession(raw);
+    if (session.isHumanHandover) sessions.push(session);
   }
-}, CLEANUP_INTERVAL_MS).unref();
+
+  return sessions.sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+async function resetSession(remoteJid: string): Promise<void> {
+  await getRedis().del(sessionKey(remoteJid));
+  await getRedis().zrem(HANDOVER_KEY, remoteJid);
+}
 
 export const sessionService = {
   getSession,
   addMessage,
-  isDuplicate,
-  markProcessed,
+  claimMessage,
   setHumanHandover,
   resumeBot,
+  completeOrder,
+  listHandoverSessions,
   resetSession,
 };

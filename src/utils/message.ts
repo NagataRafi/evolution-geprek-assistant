@@ -55,6 +55,28 @@ export function extractText(message: EvolutionMessage | undefined): string {
   return text.trim();
 }
 
+const ORDER_BLOCK_PATTERN =
+  /\[ORDER_CONFIRMED\]([\s\S]*?)(?:\[\/ORDER_CONFIRMED\]|$)/i;
+
+export interface ParsedReply {
+  visible: string;
+  receipt?: string;
+}
+
+/**
+ * Pisahkan balasan LLM menjadi teks untuk pelanggan dan struk pesanan untuk admin.
+ * Penanda blok tidak boleh sampai ke pelanggan.
+ */
+export function splitOrderConfirmation(reply: string): ParsedReply {
+  const match = reply.match(ORDER_BLOCK_PATTERN);
+  if (!match) return { visible: reply.trim() };
+
+  const visible = reply.slice(0, match.index).trim();
+  const receipt = (match[1] ?? "").trim();
+
+  return { visible, ...(receipt ? { receipt } : {}) };
+}
+
 export function isHandoverRequest(text: string): boolean {
   const normalized = text.toLowerCase();
   return HANDOVER_PATTERNS.some((pattern) => pattern.test(normalized));

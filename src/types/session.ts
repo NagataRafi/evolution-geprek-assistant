@@ -37,7 +37,6 @@ export interface CustomerSession {
   state: ConversationState;
   cart: CartItem[];
   history: ChatMessage[];
-  processedMessageIds: string[];
   isHumanHandover: boolean;
   handoverReason?: string;
   createdAt: number;

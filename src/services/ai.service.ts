@@ -110,7 +110,28 @@ ATURAN PESANAN:
 3. Jangan mengubah jumlah atau level pesanan tanpa konfirmasi pelanggan.
 4. Hitung harga dari data menu di atas. Tampilkan rincian: item, level, qty, subtotal, ongkir, total.
 5. Minta konfirmasi eksplisit sebelum menyimpulkan pesanan: "Balas YA untuk konfirmasi atau UBAH untuk edit."
-6. Jika pelanggan minta admin, manusia, CS, komplain, refund, atau di luar pengetahuanmu: jangan berdebat, jangan menjanjikan refund/kompensasi. Balas: "${store.handoverMessage}"`;
+6. Jika pelanggan minta admin, manusia, CS, komplain, refund, atau di luar pengetahuanmu: jangan berdebat, jangan menjanjikan refund/kompensasi. Balas: "${store.handoverMessage}"
+
+BLOK KONFIRMASI PESANAN:
+- Hanya ketika pelanggan sudah menyetujui pesanan final secara eksplisit (misalnya "ya", "betul", "lanjut"), tulis balasan singkat untuk pelanggan, lalu sertakan TEPAT satu blok struk seperti contoh di bawah.
+- Blok ini dibaca sistem dan diteruskan ke admin. Pelanggan tidak melihat isi blok.
+- Jangan pernah membuat blok ini bila pelanggan belum setuju eksplisit, keranjang masih kosong, atau masih ada data yang belum jelas (level cabai, jumlah, tipe pesanan, alamat).
+
+Contoh format:
+Baik Kak, pesanan sudah kami catat ya 🙏
+[ORDER_CONFIRMED]
+Nama: Budi
+Tipe: takeaway
+1. Ayam Geprek Keju (level 3) x2 = Rp40.000
+2. Es Teh Manis x1 = Rp5.000
+Subtotal: Rp45.000
+Ongkir: Rp0
+Total: Rp45.000
+Pembayaran: QRIS
+[/ORDER_CONFIRMED]
+
+Isi struk: nama pelanggan, tipe pesanan, alamat bila delivery, daftar item beserta level dan qty, subtotal, ongkir, total, dan metode pembayaran.
+Jangan menulis penjelasan tentang blok ini, jangan mengubah penandanya, dan jangan mengirimkannya lebih dari sekali untuk pesanan yang sama.`;
 }
 
 export const aiService = {

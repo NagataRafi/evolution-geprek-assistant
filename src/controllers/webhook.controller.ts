@@ -6,17 +6,26 @@ import { evolutionService } from "../services/evolution.service";
 import { sessionService } from "../services/session.service";
 import { aiService } from "../services/ai.service";
 import type { EvolutionWebhookPayload } from "../types/evolution";
+import type { CustomerSession } from "../types/session";
 import {
   extractText,
   isGroupJid,
   isHandoverRequest,
   isStatusBroadcast,
   normalizeEvent,
+  splitOrderConfirmation,
   toPhoneNumber,
 } from "../utils/message";
 
 const router = Router();
 const FALLBACK_REPLY = "Maaf Kak, sistem sedang sibuk. Coba kirim pesan lagi sebentar ya 🙏";
+const ORDER_RECEIVED_REPLY = "Baik Kak, pesanan sudah kami catat ya 🙏";
+const HELP_TEXT = [
+  "Perintah admin:",
+  "#status - daftar sesi handover aktif",
+  "#resume [nomor] - aktifkan bot kembali",
+  "#help - daftar perintah",
+].join("\n");
 
 function log(level: "info" | "error", message: string, meta?: unknown): void {
   const line = `[webhook] ${message}`;
@@ -58,40 +67,80 @@ function notifyAdmin(message: string): void {
     .catch((error) => log("error", "Gagal mengirim notifikasi admin", error));
 }
 
+function formatHandoverList(sessions: CustomerSession[]): string {
+  if (sessions.length === 0) return "Tidak ada sesi handover aktif.";
+
+  const lines = sessions.map((session, index) => {
+    const minutes = Math.max(0, Math.round((Date.now() - session.updatedAt) / 60_000));
+    return [
+      `${index + 1}. ${session.pushName ?? "-"} (${toPhoneNumber(session.remoteJid)})`,
+      `   Alasan: ${session.handoverReason ?? "-"}`,
+      `   Terakhir aktif: ${minutes} menit lalu - keranjang: ${session.cart.length} item`,
+    ].join("\n");
+  });
+
+  return [`Sesi handover aktif (${sessions.length}):`, ...lines].join("\n");
+}
+
+async function resumeSession(remoteJid: string, targetNumber?: string): Promise<void> {
+  const number = targetNumber ? toPhoneNumber(targetNumber) : toPhoneNumber(remoteJid);
+  const resumed = await sessionService.resumeBot(`${number}@s.whatsapp.net`);
+
+  await evolutionService.sendText(
+    remoteJid,
+    resumed
+      ? `Bot diaktifkan kembali untuk ${number}.`
+      : `Sesi ${number} tidak ditemukan atau sudah kedaluwarsa.`,
+  );
+}
+
 async function handleAdminCommand(
   remoteJid: string,
   text: string,
 ): Promise<boolean> {
-  if (!text.startsWith("#")) return false;
+  const commandText = text.trim();
+  if (!commandText.startsWith("#")) return false;
 
   if (!isAdmin(remoteJid)) {
     log("info", `Perintah admin ditolak dari ${remoteJid}`);
     return true;
   }
 
-  const resumeMatch = text.match(/^#resume(?:\s+(\S+))?$/i);
+  const [rawCommand, rawArg] = commandText.slice(1).split(/\s+/);
+  const command = (rawCommand ?? "").toLowerCase();
 
-  if (resumeMatch) {
-    const targetNumber = resumeMatch[1]
-      ? toPhoneNumber(resumeMatch[1])
-      : toPhoneNumber(remoteJid);
-    const targetJid = `${targetNumber}@s.whatsapp.net`;
-    const resumed = sessionService.resumeBot(targetJid);
-
-    await evolutionService.sendText(
-      remoteJid,
-      resumed
-        ? `Bot diaktifkan kembali untuk ${targetNumber}.`
-        : `Sesi ${targetNumber} tidak ditemukan atau sudah kedaluwarsa.`,
-    );
+  if (command === "resume") {
+    await resumeSession(remoteJid, rawArg);
     return true;
   }
 
-  await evolutionService.sendText(
-    remoteJid,
-    "Perintah admin: #resume [nomor] untuk mengaktifkan bot kembali.",
-  );
+  if (command === "status") {
+    const sessions = await sessionService.listHandoverSessions();
+    await evolutionService.sendText(remoteJid, formatHandoverList(sessions));
+    return true;
+  }
+
+  await evolutionService.sendText(remoteJid, HELP_TEXT);
   return true;
+}
+
+async function handleConfirmedOrder(
+  remoteJid: string,
+  pushName: string | undefined,
+  receipt: string,
+): Promise<void> {
+  await sessionService.completeOrder(remoteJid);
+
+  notifyAdmin(
+    [
+      "Pesanan dikonfirmasi pelanggan.",
+      `Pelanggan: ${pushName ?? "-"} (${toPhoneNumber(remoteJid)})`,
+      "",
+      receipt,
+    ].join("\n"),
+  );
+
+  log("info", `Pesanan dikonfirmasi untuk ${remoteJid}`);
 }
 
 async function processIncoming(
@@ -100,21 +149,21 @@ async function processIncoming(
 ): Promise<void> {
   const data = payload.data;
   const remoteJid = data.key.remoteJid;
-  const session = sessionService.getSession(remoteJid, data.pushName);
+  const session = await sessionService.getSession(remoteJid, data.pushName);
 
   if (await handleAdminCommand(remoteJid, text)) return;
 
   if (session.isHumanHandover) {
-    sessionService.addMessage(remoteJid, "user", text);
+    await sessionService.addMessage(remoteJid, "user", text);
     log("info", `Handover aktif, pesan dari ${remoteJid} tidak dibalas bot`);
     return;
   }
 
-  sessionService.addMessage(remoteJid, "user", text);
+  const updatedSession = await sessionService.addMessage(remoteJid, "user", text);
 
   if (isHandoverRequest(text)) {
     const store = getStoreConfig();
-    sessionService.setHumanHandover(remoteJid, text);
+    await sessionService.setHumanHandover(remoteJid, text);
     await evolutionService.sendText(remoteJid, store.handoverMessage);
     notifyAdmin(
       `Handover diperlukan.\nPelanggan: ${data.pushName ?? "-"} (${remoteJid})\nAlasan: ${text}`,
@@ -126,12 +175,17 @@ async function processIncoming(
   await evolutionService.sendTyping(remoteJid);
 
   try {
-    const reply = await aiService.generateReply(session);
-    await evolutionService.sendText(remoteJid, reply, {
+    const reply = await aiService.generateReply(updatedSession);
+    const { visible, receipt } = splitOrderConfirmation(reply);
+    const customerReply = visible || (receipt ? ORDER_RECEIVED_REPLY : reply);
+
+    await evolutionService.sendText(remoteJid, customerReply, {
       key: data.key,
       message: data.message ?? {},
     });
-    sessionService.addMessage(remoteJid, "assistant", reply);
+    await sessionService.addMessage(remoteJid, "assistant", customerReply);
+
+    if (receipt) await handleConfirmedOrder(remoteJid, data.pushName, receipt);
   } catch (error) {
     log("error", `Gagal membuat balasan untuk ${remoteJid}`, error);
     await evolutionService.sendText(remoteJid, FALLBACK_REPLY).catch((sendError) =>
@@ -140,7 +194,7 @@ async function processIncoming(
   }
 }
 
-router.post("/", (req: Request, res: Response) => {
+router.post("/", async (req: Request, res: Response) => {
   if (!isAuthorized(req)) {
     res.status(401).json({ error: "Unauthorized" });
     return;
@@ -177,11 +231,17 @@ router.post("/", (req: Request, res: Response) => {
     return;
   }
 
-  if (sessionService.isDuplicate(key.remoteJid, key.id)) {
-    res.status(200).json({ received: true, ignored: "duplicate" });
+  try {
+    const isNewMessage = await sessionService.claimMessage(key.remoteJid, key.id);
+    if (!isNewMessage) {
+      res.status(200).json({ received: true, ignored: "duplicate" });
+      return;
+    }
+  } catch (error) {
+    log("error", "Gagal mencatat deduplikasi di Redis", error);
+    res.status(503).json({ error: "Session store unavailable" });
     return;
   }
-  sessionService.markProcessed(key.remoteJid, key.id);
 
   res.status(200).json({ received: true });
 

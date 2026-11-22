@@ -1,7 +1,7 @@
 {
   "name": "evolution-geprek-assistant",
-  "version": "0.1.0",
-  "description": "WhatsApp cashier bot for ayam geprek built on Evolution API v2, Express, and an LLM.",
+  "version": "0.2.0",
+  "description": "WhatsApp cashier bot for ayam geprek built on Evolution API v2, Express, Redis, and an LLM.",
   "private": true,
   "main": "dist/index.js",
   "scripts": {
@@ -16,6 +16,7 @@
   "dependencies": {
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "ioredis": "^6.0.0",
     "openai": "^4.77.0"
   },
   "devDependencies": {

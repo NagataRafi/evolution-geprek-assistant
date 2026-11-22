@@ -28,6 +28,16 @@ function parsePort(raw: string | undefined): number {
   return port;
 }
 
+function parseTtlSeconds(raw: string | undefined): number {
+  if (!raw) return 1800;
+
+  const ttl = Number.parseInt(raw, 10);
+  if (!Number.isInteger(ttl) || ttl < 60) {
+    throw new Error(`SESSION_TTL_SECONDS tidak valid (minimal 60): ${raw}`);
+  }
+  return ttl;
+}
+
 function normalizePhone(raw: string): string {
   const digits = raw.replace(/\D/g, "");
   if (digits.startsWith("62")) return digits;
@@ -58,6 +68,8 @@ export const env = {
   llmModel: process.env.LLM_MODEL ?? "gpt-4o-mini",
   adminNumbers: parsePhoneList(process.env.ADMIN_NUMBERS),
   adminNotifyNumber: normalizePhone(process.env.ADMIN_NOTIFY_NUMBER ?? ""),
+  redisUrl: process.env.REDIS_URL ?? "redis://localhost:6379",
+  sessionTtlSeconds: parseTtlSeconds(process.env.SESSION_TTL_SECONDS),
 } as const;
 
 export function getMenuConfig(): MenuConfig {

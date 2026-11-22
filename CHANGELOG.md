@@ -7,6 +7,36 @@ dan versi mengikuti [Semantic Versioning](https://semver.org/lang/id/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-22
+
+### Added
+
+- Persistensi sesi ke Redis melalui `ioredis`. Riwayat chat, draft keranjang, penanda deduplikasi, dan status handover kini bertahan saat backend di-restart, dengan masa idle diatur `SESSION_TTL_SECONDS` (default 1800 detik).
+- Variabel `REDIS_URL` dan `SESSION_TTL_SECONDS` pada konfigurasi environment.
+- Perintah admin `#status` untuk melihat daftar sesi handover yang masih aktif (nama, nomor, alasan, isi keranjang, waktu aktif terakhir). Perintah ini juga membersihkan entri handover yang sudah kedaluwarsa.
+- Struk pesanan otomatis: saat pelanggan menyetujui pesanan final, LLM mengirim blok `[ORDER_CONFIRMED]` yang dipotong dari balasan pelanggan lalu diteruskan ke `ADMIN_NOTIFY_NUMBER` sebagai struk.
+- Contoh konfigurasi empat penyedia LLM (OpenAI, DeepSeek, Groq, Gemini) di `.env.example`.
+
+### Changed
+
+- `session.service.ts` sekarang menyimpan seluruh state di Redis (JSON per nomor + sorted set indeks handover) dan seluruh API-nya menjadi asinkron.
+- Deduplikasi pesan memakai `SET NX` atomik sehingga webhook yang dikirim ulang tidak bisa menghasilkan dua balasan pada saat bersamaan.
+- Setelah pesanan dikonfirmasi, keranjang dikosongkan dan state sesi menjadi `DONE`.
+- `config/menu.json` dirapikan formatnya sebagai template v0.2.0 (konsisten dengan `config/store.json`).
+
+### Fixed
+
+- Riwayat percakapan kini konsisten: pesan pelanggan terbaru ikut terkirim ke LLM setelah sesi dipindahkan ke Redis.
+
+### Security
+
+- Jika Redis tidak dapat dihubungi saat memproses webhook, server menjawab `503` agar Evolution mengirim ulang event, bukan memproses pesan tanpa deduplikasi.
+
+### Notes
+
+- Backend kini membutuhkan Redis yang hidup. Di Docker Compose gunakan `REDIS_URL=redis://redis:6379`; untuk backend di host, ekspos port Redis terlebih dahulu.
+- Belum ada persistensi pesanan, pembayaran, atau laporan penjualan.
+
 ## [0.1.0] - 2026-11-22
 
 ### Added
