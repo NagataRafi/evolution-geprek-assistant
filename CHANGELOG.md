@@ -23,6 +23,7 @@ dan versi mengikuti [Semantic Versioning](https://semver.org/lang/id/).
 - Deduplikasi pesan memakai `SET NX` atomik sehingga webhook yang dikirim ulang tidak bisa menghasilkan dua balasan pada saat bersamaan.
 - Setelah pesanan dikonfirmasi, keranjang dikosongkan dan state sesi menjadi `DONE`.
 - `config/menu.json` dirapikan formatnya sebagai template v0.2.0 (konsisten dengan `config/store.json`).
+- `config/store.json` tidak lagi menyimpan `adminNotifyNumber` yang tidak terpakai; tujuan notifikasi admin hanya dibaca dari environment (`ADMIN_NOTIFY_NUMBER` atau `ADMIN_NUMBERS`).
 
 ### Fixed
 

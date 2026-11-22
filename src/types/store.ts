@@ -17,5 +17,4 @@ export interface StoreConfig {
   paymentInfoTemplate: string;
   greeting: string;
   handoverMessage: string;
-  adminNotifyNumber: string;
 }

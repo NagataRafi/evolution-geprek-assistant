@@ -3,16 +3,31 @@
   "address": "Jl. Contoh No. 123, Bandung",
   "phone": "6281234567890",
   "operatingHours": [
-    { "day": "Senin - Jumat", "open": "10:00", "close": "21:00" },
-    { "day": "Sabtu - Minggu", "open": "10:00", "close": "22:00" }
+    {
+      "day": "Senin - Jumat",
+      "open": "10:00",
+      "close": "21:00"
+    },
+    {
+      "day": "Sabtu - Minggu",
+      "open": "10:00",
+      "close": "22:00"
+    }
   ],
-  "orderTypes": ["dine-in", "takeaway", "delivery"],
+  "orderTypes": [
+    "dine-in",
+    "takeaway",
+    "delivery"
+  ],
   "deliveryFee": 10000,
   "deliveryMinimumOrder": 30000,
   "taxRate": 0,
-  "paymentMethods": ["Tunai", "QRIS", "Transfer Bank"],
+  "paymentMethods": [
+    "Tunai",
+    "QRIS",
+    "Transfer Bank"
+  ],
   "paymentInfoTemplate": "Pembayaran:\n• Tunai saat pickup/antar\n• QRIS (scan di kasir)\n• Transfer Bank: BCA 1234567890 a.n. Geprek Pak Rafi\nKirim bukti transfer ke chat ini ya Kak.",
   "greeting": "Halo Kak 👋 Selamat datang di Geprek Pak Rafi.",
-  "handoverMessage": "Baik Kak, saya sambungkan ke admin kami ya. Mohon tunggu sebentar 🙏",
-  "adminNotifyNumber": ""
+  "handoverMessage": "Baik Kak, saya sambungkan ke admin kami ya. Mohon tunggu sebentar 🙏"
 }

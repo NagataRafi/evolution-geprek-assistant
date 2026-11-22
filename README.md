@@ -223,7 +223,7 @@ Ubah `config/menu.json` dan `config/store.json`; tidak perlu rebuild. System pro
 - `price` dalam rupiah integer (tanpa titik).
 - `requiresSpiceLevel` menentukan item wajib memilih level 0-5.
 - `deliveryFee`, `deliveryMinimumOrder`, `taxRate` di `store.json`.
-- `adminNotifyNumber` kosong berarti notifikasi handover dikirim ke nomor pertama `ADMIN_NUMBERS`.
+- `ADMIN_NOTIFY_NUMBER` yang kosong berarti notifikasi handover dan struk pesanan dikirim ke nomor pertama `ADMIN_NUMBERS`.
 
 ## Catatan
 
